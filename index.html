@@ -1204,7 +1204,8 @@ function voltarPortal() {
    - Máximo 30 fogos (3 fileiras × 10)
 ════════════════════════════════════════════ */
 function calcFogos(alunaId) {
-  const turmasAluna = DB.turmas.filter(t => t.alunas.includes(alunaId));
+  const aid = +alunaId;
+  const turmasAluna = DB.turmas.filter(t => t.alunas.map(Number).includes(aid));
   if (!turmasAluna.length) return 0;
 
   const hoje = new Date(dataHoje());
@@ -1225,7 +1226,7 @@ function calcFogos(alunaId) {
   let fogos = 0;
   for (let i = datasAula.length - 1; i >= 0; i--) {
     const data = datasAula[i];
-    const fez = DB.checkins.some(c => c.alunaId === alunaId && c.data === data);
+    const fez = DB.checkins.some(c => +c.alunaId === aid && c.data === data);
     if (fez) {
       fogos++;
       if (fogos >= 30) break;
@@ -1610,7 +1611,7 @@ function registrarCheckin() {
   const dup = DB.checkins.find(c => c.alunaId === alunaId && c.data === data);
   if (dup) { showFb(fb,'erro','Já existe um check-in para esta aluna nesta data.'); return; }
 
-  DB.checkins.push({ id: DB.nextId++, alunaId, data, hora });
+  DB.checkins.push({ id: DB.nextId++, alunaId: +alunaId, data, hora });
 
   const al = DB.alunas.find(a => a.id === alunaId);
   showFb(fb,'ok',`✓ Check-in registrado para <b>${al.nome}</b> em ${formatData(data)} às ${hora}.`);
@@ -1766,13 +1767,14 @@ function remAlTurma(tid, aid) {
    PORTAL DA ALUNA (usado no admin E no app da aluna)
 ════════════════════════════════════════════ */
 function renderPortalAluna(alunaId, container, isAdmin) {
-  const al = DB.alunas.find(a => a.id === alunaId);
+  const al = DB.alunas.find(a => a.id === alunaId || a.id === +alunaId);
   if (!al) { container.innerHTML = `<p style="color:var(--red)">Aluna não encontrada.</p>`; return; }
-  const cis = DB.checkins.filter(c => c.alunaId === alunaId);
+  const aid = al.id; // sempre número
+  const cis = DB.checkins.filter(c => c.alunaId === aid || c.alunaId === +aid);
   const mesAtual = dataHoje().slice(0,7);
   const cisMes = cis.filter(c => c.data.startsWith(mesAtual)).length;
-  const medidas = DB.medidas.filter(m => m.alunaId === alunaId).sort((a,b) => a.data.localeCompare(b.data));
-  const fogos = calcFogos(alunaId);
+  const medidas = DB.medidas.filter(m => m.alunaId === aid || m.alunaId === +aid).sort((a,b) => a.data.localeCompare(b.data));
+  const fogos = calcFogos(aid);
 
   // hero com foguinhos no canto direito
   let html = `
@@ -1848,23 +1850,37 @@ function renderPortalAluna(alunaId, container, isAdmin) {
   if (medidas.length) {
     html += `<div class="egrid">`;
     MEDIDAS_DEF.forEach(md => {
-      const vals = medidas.map(m => m[md.key]).filter(v => v != null && v !== '');
+      // garante que comparamos números — localStorage pode serializar ids como string
+      const vals = medidas
+        .map(m => {
+          const v = m[md.key];
+          return (v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v))) ? parseFloat(v) : null;
+        })
+        .filter(v => v !== null);
+
       if (!vals.length) return;
+
+      // pega apenas as medidas que têm o campo preenchido (mesmo índice)
+      const medidasComCampo = medidas.filter(m => {
+        const v = m[md.key];
+        return v !== null && v !== undefined && v !== '' && !isNaN(parseFloat(v));
+      });
+
       const atual = vals[vals.length-1];
       const ant   = vals.length > 1 ? vals[vals.length-2] : null;
       const diff  = ant != null ? (atual - ant).toFixed(1) : null;
       const melhorou = diff != null ? (md.ganhar ? parseFloat(diff)>0 : parseFloat(diff)<0) : null;
-      const maxV  = Math.max(...vals) * 1.1;
-      const meses = medidas.slice(-vals.length).map(m => m.data.slice(5,7)+'/'+m.data.slice(2,4));
+      const maxV  = Math.max(...vals) * 1.1 || 1;
+      const meses = medidasComCampo.map(m => m.data.slice(5,7)+'/'+m.data.slice(2,4));
 
       const barras = vals.map((v,i) => {
         const h = Math.max(4, Math.round((v/maxV)*66));
         const last = i===vals.length-1;
         return `<div class="bcol">
           <div class="bfill" style="height:${h}px;background:${last?md.corBar:'rgba(255,255,255,0.1)'}">
-            <div class="btt">${meses[i]}: ${v}${md.un}</div>
+            <div class="btt">${meses[i]||''}: ${v}${md.un}</div>
           </div>
-          <span class="bmes">${meses[i]}</span>
+          <span class="bmes">${meses[i]||''}</span>
         </div>`;
       }).join('');
 
@@ -1967,7 +1983,7 @@ function alunaFazCheckin(alunaId) {
     return;
   }
 
-  DB.checkins.push({ id: DB.nextId++, alunaId, data: hoje, hora: horas });
+  DB.checkins.push({ id: DB.nextId++, alunaId: +alunaId, data: hoje, hora: horas });
   renderPortalAluna(alunaId, document.getElementById('ap-content'), false);
 }
 
@@ -1989,7 +2005,7 @@ function salvarMedida() {
   const data = document.getElementById('med-data').value;
   if (!data) { document.getElementById('med-data').focus(); return; }
   const m = {
-    id:DB.nextId++, alunaId:medAlunaId, data,
+    id:DB.nextId++, alunaId: +medAlunaId, data,
     peso:    parseFloat(document.getElementById('med-peso').value)||null,
     cintura: parseFloat(document.getElementById('med-cintura').value)||null,
     peito:   parseFloat(document.getElementById('med-peito').value)||null,
@@ -2025,7 +2041,7 @@ function calcVencimento(pag) {
 
 // Retorna o último pagamento de cada aluna
 function ultimoPagamentoAluna(alunaId) {
-  return DB.pagamentos.filter(p => p.alunaId === alunaId).sort((a,b) => b.data.localeCompare(a.data))[0] || null;
+  return DB.pagamentos.filter(p => +p.alunaId === +alunaId).sort((a,b) => b.data.localeCompare(a.data))[0] || null;
 }
 
 // Retorna dias até vencimento (negativo = vencido)
@@ -2124,7 +2140,7 @@ function salvarPagamento() {
 
   if (!alunaId || !plano || !valor || !data || !diaVenc) return;
 
-  const pag = { id: DB.nextId++, alunaId, plano, valor, data, diaVenc, forma, referencia: ref, obs };
+  const pag = { id: DB.nextId++, alunaId: +alunaId, plano, valor, data, diaVenc, forma, referencia: ref, obs };
   DB.pagamentos.push(pag);
 
   // atualiza plano e diaVenc da aluna
