@@ -519,7 +519,17 @@ tr:hover td{background:rgba(255,255,255,.02);}
     </div>
     <p class="ltagline">Acesse sua plataforma</p>
     <div class="lfield"><label>Usuário</label><input type="text" id="lin-user" placeholder="seu usuário" autocomplete="username"></div>
-    <div class="lfield"><label>Senha</label><input type="password" id="lin-pass" placeholder="••••••••" autocomplete="current-password"></div>
+    <div class="lfield">
+      <label>Senha</label>
+      <div style="position:relative">
+        <input type="password" id="lin-pass" placeholder="••••••••" autocomplete="current-password" style="padding-right:42px">
+        <button onclick="toggleSenha()" type="button" id="btn-olho" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0;line-height:1">👁</button>
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);cursor:pointer;margin-bottom:4px;user-select:none">
+      <input type="checkbox" id="lin-lembrar" style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer">
+      Lembrar meu usuário
+    </label>
     <button class="lbtn" onclick="doLogin()">Entrar</button>
     <div class="lerr" id="lerr">Usuário ou senha incorretos.</div>
   </div>
@@ -1002,12 +1012,13 @@ tr:hover td{background:rgba(255,255,255,.02);}
 
 <script>
 /* ════════════════════════════════════════════
-   ESTADO GLOBAL
+   ESTADO GLOBAL + PERSISTÊNCIA
 ════════════════════════════════════════════ */
 const ADMIN_USER = 'kelli';
 const ADMIN_PASS = '03033119';
+const DB_KEY = 'pkc_db_v1';
 
-let DB = {
+const DB_DEFAULT = {
   alunas: [
     { id:1, nome:'Julia Oliveira',  cpf:'111111111111', nasc:'', tel:'', email:'', plano:'Mensal',    valor:180, inicio:'2025-01-10', obs:'', login:'juliaoliveira',  senha:'123456', status:'ativo', ativo:true },
     { id:2, nome:'Karen Santos',    cpf:'222222222222', nasc:'', tel:'', email:'', plano:'Mensal',    valor:180, inicio:'2025-02-03', obs:'', login:'karensantos',    senha:'123456', status:'ativo', ativo:true },
@@ -1017,12 +1028,41 @@ let DB = {
   turmas: [],
   checkins: [],
   medidas: [],
-  pagamentos: [],  // { id, alunaId, plano, valor, data, diaVenc, forma, referencia, obs }
-  despesas: [],    // { id, descricao, categoria, valor, data }
+  pagamentos: [],
+  despesas: [],
   nextId: 10,
 };
 
-let currentUser = null; // { tipo:'admin'|'aluna', alunaId? }
+// Carrega DB do localStorage ou usa o padrão
+function carregarDB() {
+  try {
+    const saved = localStorage.getItem(DB_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // garante que todas as chaves existem (retrocompatibilidade)
+      return {
+        alunas:     parsed.alunas     || DB_DEFAULT.alunas,
+        turmas:     parsed.turmas     || [],
+        checkins:   parsed.checkins   || [],
+        medidas:    parsed.medidas    || [],
+        pagamentos: parsed.pagamentos || [],
+        despesas:   parsed.despesas   || [],
+        nextId:     parsed.nextId     || 10,
+      };
+    }
+  } catch(e) { console.warn('Erro ao carregar DB:', e); }
+  return JSON.parse(JSON.stringify(DB_DEFAULT));
+}
+
+// Salva DB no localStorage — chamado após toda ação que modifica dados
+function salvarDB() {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); }
+  catch(e) { console.warn('Erro ao salvar DB:', e); }
+}
+
+let DB = carregarDB();
+
+let currentUser = null;
 let secAnterior = 'alunas';
 let tFiltro = 'todos';
 let editTurmaId = null;
@@ -1045,12 +1085,47 @@ const MEDIDAS_DEF = [
 /* ════════════════════════════════════════════
    LOGIN / LOGOUT
 ════════════════════════════════════════════ */
+/* ════════════════════════════════════════════
+   LOGIN / LOGOUT
+════════════════════════════════════════════ */
+
+// Mostrar/ocultar senha
+function toggleSenha() {
+  const inp = document.getElementById('lin-pass');
+  const btn = document.getElementById('btn-olho');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = '🙈';
+  } else {
+    inp.type = 'password';
+    btn.textContent = '👁';
+  }
+}
+
+// Carrega usuário salvo se existir
+(function carregarUsuarioSalvo() {
+  try {
+    const salvo = localStorage.getItem('pkc_login_user');
+    if (salvo) {
+      document.getElementById('lin-user').value = salvo;
+      document.getElementById('lin-lembrar').checked = true;
+    }
+  } catch(e) {}
+})();
+
 document.getElementById('lin-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
 function doLogin() {
   const u = document.getElementById('lin-user').value.trim().toLowerCase().replace(/\s+/g,'');
   const p = document.getElementById('lin-pass').value;
+  const lembrar = document.getElementById('lin-lembrar').checked;
   const err = document.getElementById('lerr');
+
+  // salva ou remove usuário lembrado
+  try {
+    if (lembrar) localStorage.setItem('pkc_login_user', u);
+    else localStorage.removeItem('pkc_login_user');
+  } catch(e) {}
 
   if (u === ADMIN_USER && p === ADMIN_PASS) {
     currentUser = { tipo:'admin' };
@@ -1062,7 +1137,6 @@ function doLogin() {
     return;
   }
 
-  // tenta login de aluna
   const aluna = DB.alunas.find(a => a.login === u && a.senha === p);
   if (aluna) {
     currentUser = { tipo:'aluna', alunaId: aluna.id };
@@ -1084,8 +1158,11 @@ function doLogout() {
   document.getElementById('app').classList.remove('visible');
   document.getElementById('aluna-app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('lin-user').value = '';
   document.getElementById('lin-pass').value = '';
+  // mantém o usuário no campo se "lembrar" estiver marcado
+  if (!document.getElementById('lin-lembrar').checked) {
+    document.getElementById('lin-user').value = '';
+  }
 }
 
 function initAdmin() {
@@ -2287,6 +2364,7 @@ function atualizarBadge() {
 function syncTudo(opts = {}) {
   atualizarStatusTodas();
   atualizarBadge();
+  salvarDB(); // persiste tudo no localStorage
   renderDashboard();
 
   const secAtiva = document.querySelector('.sec.active')?.id || '';
