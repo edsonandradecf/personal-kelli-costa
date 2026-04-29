@@ -392,6 +392,119 @@ tr:hover td{background:rgba(255,255,255,.02);}
   display:flex;align-items:center;justify-content:center;
   font-size:9px;color:#fff;font-weight:700;
 }
+/* ══ RESPONSIVO MOBILE ══ */
+@media (max-width: 768px) {
+
+  /* Login */
+  .lbox { padding: 32px 24px; margin: 16px; }
+
+  /* App admin — esconde sidebar, vira bottom nav */
+  #app.visible { flex-direction: column; }
+  .sidebar {
+    width: 100%; min-width: 0;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+    flex-direction: row;
+    overflow-x: auto;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 50;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+  }
+  .slogo { display: none; }
+  .nav-section { display: flex; flex-direction: row; padding: 0; margin: 0; }
+  .nav-lbl { display: none; }
+  .ni {
+    flex-direction: column;
+    gap: 3px;
+    padding: 10px 14px;
+    font-size: 10px;
+    border-radius: 0;
+    white-space: nowrap;
+    min-width: 60px;
+    justify-content: center;
+    align-items: center;
+  }
+  .ni.active { background: transparent; color: var(--accent); }
+  .ni.active::after { display: none; }
+  .ni-icon { font-size: 20px; width: auto; }
+  .nbadge { position: absolute; top: 6px; right: 8px; }
+  .sfooter { display: none; }
+
+  /* Main content — add bottom padding for nav */
+  .main { padding-bottom: 70px; }
+  .topbar { padding: 12px 16px; gap: 10px; }
+  .topbar h1 { font-size: 16px; }
+  .tsearch { width: 140px; font-size: 12px; padding: 6px 10px; }
+  .content { padding: 16px; }
+
+  /* Grids → single column */
+  .g2, .g3 { grid-template-columns: 1fr; gap: 12px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .sval { font-size: 22px; }
+
+  /* Turma destaque → alunas em 2 colunas */
+  .td-alunas { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .td-nome { font-size: 14px; }
+  .td-hora { font-size: 13px; }
+
+  /* Cards */
+  .card { padding: 16px; }
+  .fgrid { grid-template-columns: 1fr; }
+  .fg.full { grid-column: 1; }
+
+  /* Tabela alunas — esconde colunas menos importantes */
+  table th:nth-child(2),
+  table td:nth-child(2) { display: none; } /* login */
+  table th:nth-child(5),
+  table td:nth-child(5) { display: none; } /* check-ins */
+  td, th { padding: 8px 8px; font-size: 12px; }
+
+  /* Financeiro tabs */
+  #fin-tabs { flex-wrap: wrap; gap: 6px; }
+  .ftab { padding: 6px 12px; font-size: 12px; }
+
+  /* Portal aluna — hero */
+  .phero { flex-wrap: wrap; padding: 20px 16px; gap: 14px; }
+  .phav { width: 52px; height: 52px; font-size: 18px; }
+  .phi h2 { font-size: 18px; }
+
+  /* mstats — 3 colunas menores */
+  .mstats { gap: 8px; }
+  .mstat { padding: 12px 8px; }
+  .mstat-v { font-size: 18px; }
+  .mstat-l { font-size: 10px; }
+
+  /* Evolução física — 1 coluna */
+  .egrid { grid-template-columns: 1fr; }
+
+  /* Check-in portal */
+  .ci-bigbtn { width: 100%; justify-content: center; padding: 14px 20px; }
+  .ci-portal { padding: 20px 16px; }
+
+  /* Modais */
+  .modal { padding: 20px 16px; margin: 16px; max-width: calc(100% - 32px); }
+
+  /* Aluna app header */
+  #aluna-app > div:first-child { padding: 12px 16px; }
+  #aluna-app > div:last-child { padding: 16px; }
+}
+
+@media (max-width: 400px) {
+  .td-alunas { grid-template-columns: 1fr 1fr; }
+  .td-aluna-card { padding: 12px 8px 10px; }
+  .td-av { width: 42px; height: 42px; font-size: 13px; }
+  .td-aluna-nome { font-size: 11px; }
+  .fogo { font-size: 11px; }
+  .stat-grid { grid-template-columns: 1fr 1fr; }
+  .sval { font-size: 20px; }
+  .topbar h1 { font-size: 15px; }
+  .tsearch { display: none; }
+}
 </style>
 </head>
 <body>
@@ -715,7 +828,7 @@ tr:hover td{background:rgba(255,255,255,.02);}
       <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="doLogout()">Sair</button>
     </div>
   </div>
-  <div style="max-width:700px;margin:0 auto;padding:24px 20px;">
+  <div style="max-width:700px;margin:0 auto;padding:24px 20px;padding-bottom:32px;">
     <div id="ap-content"></div>
   </div>
 </div>
