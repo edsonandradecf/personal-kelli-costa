@@ -1244,16 +1244,6 @@ function toggleTema() {
   aplicarTema(atual === 'light' ? 'dark' : 'light');
 }
 
-// aplica tema salvo ao carregar
-(function() {
-  try {
-    const t = localStorage.getItem('pkc_tema') || 'dark';
-    aplicarTema(t);
-  } catch(e) {}
-})();
-
-
-
 // Mostrar/ocultar senha
 function toggleSenha() {
   const inp = document.getElementById('lin-pass');
@@ -1266,19 +1256,6 @@ function toggleSenha() {
     btn.textContent = '👁';
   }
 }
-
-// Carrega usuário salvo se existir
-(function carregarUsuarioSalvo() {
-  try {
-    const salvo = localStorage.getItem('pkc_login_user');
-    if (salvo) {
-      document.getElementById('lin-user').value = salvo;
-      document.getElementById('lin-lembrar').checked = true;
-    }
-  } catch(e) {}
-})();
-
-document.getElementById('lin-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
 async function doLogin() {
   const u = document.getElementById('lin-user').value.trim().toLowerCase().replace(/\s+/g,'');
@@ -2671,12 +2648,73 @@ function showFb(el, tipo, msg) {
 function openM(id)  { document.getElementById(id).classList.add('open'); }
 function closeM(id) { document.getElementById(id).classList.remove('open'); }
 
-document.querySelectorAll('#mt-dias .daylbl').forEach(l => {
-  l.addEventListener('click', () => setTimeout(() => l.classList.toggle('on', l.querySelector('input').checked), 0));
+/* expõe todas as funções usadas em onclick para o escopo global */
+window.doLogin             = doLogin;
+window.doLogout            = doLogout;
+window.toggleSenha         = toggleSenha;
+window.toggleTema          = toggleTema;
+window.goSec               = goSec;
+window.abrirPortal         = abrirPortal;
+window.voltarPortal        = voltarPortal;
+window.alunaFazCheckin     = alunaFazCheckin;
+window.openModalTurma      = openModalTurma;
+window.salvarTurma         = salvarTurma;
+window.delTurma            = delTurma;
+window.openModalAddAl      = openModalAddAl;
+window.confirmarAlsTurma   = confirmarAlsTurma;
+window.remAlTurma          = remAlTurma;
+window.filterT             = filterT;
+window.excluirAluna        = excluirAluna;
+window.searchAlunas        = searchAlunas;
+window.cadastrarAluna      = cadastrarAluna;
+window.limparCadastro      = limparCadastro;
+window.formatCpf           = formatCpf;
+window.switchCiTab         = switchCiTab;
+window.registrarCheckin    = registrarCheckin;
+window.removerCheckin      = removerCheckin;
+window.renderHistorico     = renderHistorico;
+window.openModalMedida     = openModalMedida;
+window.salvarMedida        = salvarMedida;
+window.abrirModalPagamento = abrirModalPagamento;
+window.preencherDadosAlunaPag = preencherDadosAlunaPag;
+window.toggleTipoPagamento = toggleTipoPagamento;
+window.salvarPagamento     = salvarPagamento;
+window.remPagamento        = remPagamento;
+window.salvarDespesa       = salvarDespesa;
+window.remDespesa          = remDespesa;
+window.switchFinTab        = switchFinTab;
+window.openM               = openM;
+window.closeM              = closeM;
+
+// garante que os eventos de teclado funcionam após carregamento
+document.addEventListener('DOMContentLoaded', () => {
+  const passInput = document.getElementById('lin-pass');
+  if (passInput) passInput.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+
+  // aplica tema salvo
+  try {
+    const t = localStorage.getItem('pkc_tema') || 'dark';
+    aplicarTema(t);
+  } catch(e) {}
+
+  // carrega usuário salvo no campo de login
+  try {
+    const salvo = localStorage.getItem('pkc_login_user');
+    if (salvo) {
+      const u = document.getElementById('lin-user');
+      const c = document.getElementById('lin-lembrar');
+      if (u) u.value = salvo;
+      if (c) c.checked = true;
+    }
+  } catch(e) {}
+
+  // day checkboxes nas turmas
+  document.querySelectorAll('#mt-dias .daylbl').forEach(l => {
+    l.addEventListener('click', () => setTimeout(() => l.classList.toggle('on', l.querySelector('input').checked), 0));
+  });
+
+  // fechar modal ao clicar fora
+  document.querySelectorAll('.moverlay').forEach(o => {
+    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+  });
 });
-document.querySelectorAll('.moverlay').forEach(o => {
-  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
-});
-</script>
-</body>
-</html>
