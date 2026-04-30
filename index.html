@@ -1054,23 +1054,22 @@ body.light .ci-bigbtn { box-shadow: 0 4px 16px rgba(240,54,154,.2); }
   </div>
 </div>
 
-<!-- Script principal com Firebase integrado -->
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+<!-- Firebase compat (não usa import/module, sem conflitos de escopo) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 
-const firebaseConfig = {
+<script>
+// Inicializa Firebase
+const _fbApp = firebase.initializeApp({
   apiKey: "AIzaSyDtUiozAZEjUggBXjzXlW4nk3WL7BR-Fo4",
   authDomain: "personal-kelli-costa.firebaseapp.com",
   projectId: "personal-kelli-costa",
   storageBucket: "personal-kelli-costa.firebasestorage.app",
   messagingSenderId: "968675355503",
   appId: "1:968675355503:web:f65cbd9d770958f179969a"
-};
-
-const _fbApp  = initializeApp(firebaseConfig);
-const _db     = getFirestore(_fbApp);
-const DB_DOC  = doc(_db, 'academia', 'dados');
+});
+const _db    = firebase.firestore();
+const DB_DOC = _db.collection('academia').doc('dados');
 
 
 /* ════════════════════════════════════════════
@@ -1101,8 +1100,8 @@ let _unsubscribe = null;
 
 async function carregarDB() {
   try {
-    const snap = await getDoc(DB_DOC);
-    if (snap.exists()) {
+    const snap = await DB_DOC.get();
+    if (snap.exists) {
       const data = snap.data();
       DB = {
         alunas:     data.alunas     || DB_DEFAULT.alunas,
@@ -1114,7 +1113,7 @@ async function carregarDB() {
         nextId:     data.nextId     || 10,
       };
     } else {
-      await setDoc(DB_DOC, JSON.parse(JSON.stringify(DB_DEFAULT)));
+      await DB_DOC.set(JSON.parse(JSON.stringify(DB_DEFAULT)));
       DB = JSON.parse(JSON.stringify(DB_DEFAULT));
     }
     firestoreAtivo = true;
@@ -1142,7 +1141,7 @@ async function carregarDB() {
 async function salvarDB() {
   try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
   if (firestoreAtivo) {
-    try { await setDoc(DB_DOC, JSON.parse(JSON.stringify(DB))); }
+    try { await DB_DOC.set(JSON.parse(JSON.stringify(DB))); }
     catch(e) { console.warn('Erro ao salvar Firestore:', e); }
   }
 }
@@ -1150,8 +1149,8 @@ async function salvarDB() {
 function iniciarListenerTempoReal() {
   if (!firestoreAtivo) return;
   if (_unsubscribe) _unsubscribe();
-  _unsubscribe = onSnapshot(DB_DOC, (snap) => {
-    if (!snap.exists()) return;
+  _unsubscribe = DB_DOC.onSnapshot((snap) => {
+    if (!snap.exists) return;
     const data = snap.data();
     const novoJson = JSON.stringify(data);
     if (novoJson === JSON.stringify(DB)) return;
@@ -1165,10 +1164,10 @@ function iniciarListenerTempoReal() {
       nextId:     data.nextId     || DB.nextId,
     };
     try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
-    if (currentUser?.tipo === 'aluna') {
+    if (currentUser && currentUser.tipo === 'aluna') {
       atualizarStatusTodas();
       renderPortalAluna(currentUser.alunaId, document.getElementById('ap-content'), false);
-    } else if (currentUser?.tipo === 'admin') {
+    } else if (currentUser && currentUser.tipo === 'admin') {
       syncTudo();
     }
   });
@@ -2730,45 +2729,8 @@ function showFb(el, tipo, msg) {
 function openM(id)  { document.getElementById(id).classList.add('open'); }
 function closeM(id) { document.getElementById(id).classList.remove('open'); }
 
-/* expõe todas as funções usadas em onclick para o escopo global */
-window.doLogin             = doLogin;
-window.doLogout            = doLogout;
-window.toggleSenha         = toggleSenha;
-window.toggleTema          = toggleTema;
-window.goSec               = goSec;
-window.abrirPortal         = abrirPortal;
-window.voltarPortal        = voltarPortal;
-window.alunaFazCheckin     = alunaFazCheckin;
-window.openModalTurma      = openModalTurma;
-window.salvarTurma         = salvarTurma;
-window.delTurma            = delTurma;
-window.openModalAddAl      = openModalAddAl;
-window.confirmarAlsTurma   = confirmarAlsTurma;
-window.remAlTurma          = remAlTurma;
-window.filterT             = filterT;
-window.excluirAluna        = excluirAluna;
-window.searchAlunas        = searchAlunas;
-window.cadastrarAluna      = cadastrarAluna;
-window.limparCadastro      = limparCadastro;
-window.formatCpf           = formatCpf;
-window.switchCiTab         = switchCiTab;
-window.registrarCheckin    = registrarCheckin;
-window.removerCheckin      = removerCheckin;
-window.renderHistorico     = renderHistorico;
-window.openModalMedida     = openModalMedida;
-window.salvarMedida        = salvarMedida;
-window.abrirModalPagamento = abrirModalPagamento;
-window.preencherDadosAlunaPag = preencherDadosAlunaPag;
-window.toggleTipoPagamento = toggleTipoPagamento;
-window.salvarPagamento     = salvarPagamento;
-window.remPagamento        = remPagamento;
-window.salvarDespesa       = salvarDespesa;
-window.remDespesa          = remDespesa;
-window.switchFinTab        = switchFinTab;
-window.openM               = openM;
-window.closeM              = closeM;
+/* fim do script */
 
-// garante que os eventos de teclado funcionam após carregamento
 document.addEventListener('DOMContentLoaded', () => {
   const passInput = document.getElementById('lin-pass');
   if (passInput) passInput.addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
