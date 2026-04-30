@@ -1956,7 +1956,109 @@ function remAlTurma(tid, aid) {
 }
 
 /* ════════════════════════════════════════════
-   PORTAL DA ALUNA (usado no admin E no app da aluna)
+   CARD PRÓXIMO TREINO (portal da aluna)
+════════════════════════════════════════════ */
+function renderCardProximoTreino(alunaId) {
+  const aid = +alunaId;
+  const turmasAluna = DB.turmas.filter(t => t.alunas.map(Number).includes(aid));
+
+  if (!turmasAluna.length) return ''; // sem turmas, não mostra
+
+  const DIAS_SEMANA = ['dom','seg','ter','qua','qui','sex','sab'];
+  const DIAS_EXTENSO = {
+    dom:'domingo', seg:'segunda-feira', ter:'terça-feira',
+    qua:'quarta-feira', qui:'quinta-feira', sex:'sexta-feira', sab:'sábado'
+  };
+  const DIAS_EXTENSO_HOJ = {
+    dom:'Hoje, domingo', seg:'Hoje, segunda', ter:'Hoje, terça',
+    qua:'Hoje, quarta',  qui:'Hoje, quinta',  sex:'Hoje, sexta', sab:'Hoje, sábado'
+  };
+
+  const agora     = new Date();
+  const hojeIdx   = agora.getDay();           // 0=dom … 6=sab
+  const hojeKey   = DIAS_SEMANA[hojeIdx];
+  const agoraMin  = agora.getHours()*60 + agora.getMinutes();
+
+  // monta lista de todas as ocorrências de turma para os próximos 7 dias
+  // cada item: { turma, diaKey, minutosInicio, offsetDias }
+  const ocorrencias = [];
+  for (let offset = 0; offset <= 7; offset++) {
+    const dIdx  = (hojeIdx + offset) % 7;
+    const dKey  = DIAS_SEMANA[dIdx];
+    turmasAluna.forEach(t => {
+      if (!t.dias.includes(dKey)) return;
+      const [hh, mm] = t.hora.split(':').map(Number);
+      const minInicio = hh*60 + mm;
+      // se for hoje, só conta se a aula ainda não terminou
+      if (offset === 0 && minInicio + (t.duracao||60) <= agoraMin) return;
+      ocorrencias.push({ turma: t, diaKey: dKey, minInicio, offsetDias: offset });
+    });
+  }
+
+  if (!ocorrencias.length) {
+    return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px">
+      <div style="font-size:28px">📅</div>
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)">Sem treinos nos próximos dias</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Fale com a Kelli para organizar sua agenda</div>
+      </div>
+    </div>`;
+  }
+
+  // ordena por offset e depois por horário
+  ocorrencias.sort((a,b) => a.offsetDias !== b.offsetDias ? a.offsetDias - b.offsetDias : a.minInicio - b.minInicio);
+  const prox = ocorrencias[0];
+  const t    = prox.turma;
+
+  const hojeTemAula   = prox.offsetDias === 0;
+  const agoraEmAula   = hojeTemAula && agoraMin >= prox.minInicio && agoraMin < prox.minInicio + (t.duracao||60);
+  const amanha        = prox.offsetDias === 1;
+
+  // monta a data no formato relativo legível
+  let quando, emoji, bg, cor;
+  if (agoraEmAula) {
+    quando = `Treino em andamento agora — ${t.hora}`;
+    emoji  = '🏋️';
+    bg     = `rgba(240,54,154,.12)`;
+    cor    = `var(--accent)`;
+  } else if (hojeTemAula) {
+    when   = `${DIAS_EXTENSO_HOJ[prox.diaKey]} às ${t.hora}`;
+    quando = `Você tem treino hoje às ${t.hora}`;
+    emoji  = '🔥';
+    bg     = `rgba(240,54,154,.1)`;
+    cor    = `var(--accent)`;
+  } else if (amanha) {
+    quando = `Seu próximo treino é amanhã às ${t.hora}`;
+    emoji  = '📅';
+    bg     = `var(--surface)`;
+    cor    = `var(--blue)`;
+  } else {
+    const diaExt = DIAS_EXTENSO[prox.diaKey];
+    quando = `Seu próximo treino será ${diaExt} às ${t.hora}`;
+    emoji  = '📅';
+    bg     = `var(--surface)`;
+    cor    = `var(--muted)`;
+  }
+
+  // lista todos os treinos do dia se tiver mais de um hoje
+  const outrosHoje = ocorrencias.filter(o => o.offsetDias === 0 && o !== prox);
+  const extras = outrosHoje.length
+    ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">+ ${outrosHoje.map(o => `${o.turma.nome} às ${o.turma.hora}`).join(' · ')}</div>`
+    : '';
+
+  return `<div style="background:${bg};border:1px solid ${agoraEmAula||hojeTemAula?'rgba(240,54,154,.3)':'var(--border)'};border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:flex;align-items:center;gap:14px;transition:all .15s">
+    <div style="font-size:30px;flex-shrink:0">${emoji}</div>
+    <div style="flex:1">
+      <div style="font-size:14px;font-weight:600;color:${cor}">${quando}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:3px">${t.nome}${t.duracao ? ` · ${t.duracao}min` : ''}</div>
+      ${extras}
+    </div>
+    ${agoraEmAula ? `<div style="background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:4px 10px;border-radius:99px;flex-shrink:0">AO VIVO</div>` : ''}
+  </div>`;
+}
+
+/* ════════════════════════════════════════════
+   PORTAL DA ALUNA
 ════════════════════════════════════════════ */
 function renderPortalAluna(alunaId, container, isAdmin) {
   const al = DB.alunas.find(a => a.id === alunaId || a.id === +alunaId);
@@ -1991,7 +2093,9 @@ function renderPortalAluna(alunaId, container, isAdmin) {
     <div class="mstat"><div class="mstat-ico">✅</div><div class="mstat-v" style="color:var(--accent)">${cisMes}</div><div class="mstat-l">Check-ins no mês</div></div>
     <div class="mstat"><div class="mstat-ico">📊</div><div class="mstat-v" style="color:var(--blue)">${cis.length}</div><div class="mstat-l">Total acumulado</div></div>
     <div class="mstat"><div class="mstat-ico">📋</div><div class="mstat-v" style="color:var(--purple)">${al.plano}</div><div class="mstat-l">Plano ativo</div></div>
-  </div>`;
+  </div>
+
+  ${renderCardProximoTreino(aid)}`;
 
   // check-in (só no portal da aluna, não no admin)
   if (!isAdmin) {
