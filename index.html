@@ -1054,13 +1054,37 @@ body.light .ci-bigbtn { box-shadow: 0 4px 16px rgba(240,54,154,.2); }
   </div>
 </div>
 
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDtUiozAZEjUggBXjzXlW4nk3WL7BR-Fo4",
+  authDomain: "personal-kelli-costa.firebaseapp.com",
+  projectId: "personal-kelli-costa",
+  storageBucket: "personal-kelli-costa.firebasestorage.app",
+  messagingSenderId: "968675355503",
+  appId: "1:968675355503:web:f65cbd9d770958f179969a"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db_fire = getFirestore(firebaseApp);
+const DB_DOC = doc(db_fire, 'academia', 'dados');
+
+// expõe para o script principal
+window._firestore = { getDoc, setDoc, onSnapshot, DB_DOC };
+window._firebaseReady = true;
+window.dispatchEvent(new Event('firebase-ready'));
+</script>
+
 <script>
 /* ════════════════════════════════════════════
-   ESTADO GLOBAL + PERSISTÊNCIA
+   ESTADO GLOBAL + FIRESTORE
 ════════════════════════════════════════════ */
 const ADMIN_USER = 'kelli';
 const ADMIN_PASS = '03033119';
-const DB_KEY = 'pkc_db_v1';
+const DB_KEY = 'pkc_db_v1'; // fallback local
 
 const DB_DEFAULT = {
   alunas: [
@@ -1077,34 +1101,106 @@ const DB_DEFAULT = {
   nextId: 10,
 };
 
-// Carrega DB do localStorage ou usa o padrão
-function carregarDB() {
+let DB = JSON.parse(JSON.stringify(DB_DEFAULT));
+let firestoreAtivo = false;
+let _unsubscribe = null; // listener tempo real
+
+/* ── Carrega dados do Firestore (ou localStorage como fallback) ── */
+async function carregarDB() {
+  if (window._firebaseReady && window._firestore) {
+    try {
+      const snap = await window._firestore.getDoc(window._firestore.DB_DOC);
+      if (snap.exists()) {
+        const data = snap.data();
+        DB = {
+          alunas:     data.alunas     || DB_DEFAULT.alunas,
+          turmas:     data.turmas     || [],
+          checkins:   data.checkins   || [],
+          medidas:    data.medidas    || [],
+          pagamentos: data.pagamentos || [],
+          despesas:   data.despesas   || [],
+          nextId:     data.nextId     || 10,
+        };
+        firestoreAtivo = true;
+        // copia para localStorage como cache offline
+        try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
+        return;
+      } else {
+        // primeira vez: sobe o DB_DEFAULT para o Firestore
+        await window._firestore.setDoc(window._firestore.DB_DOC, DB_DEFAULT);
+        DB = JSON.parse(JSON.stringify(DB_DEFAULT));
+        firestoreAtivo = true;
+        return;
+      }
+    } catch(e) { console.warn('Firestore indisponível, usando localStorage:', e); }
+  }
+  // fallback: localStorage
   try {
     const saved = localStorage.getItem(DB_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      // garante que todas as chaves existem (retrocompatibilidade)
-      return {
-        alunas:     parsed.alunas     || DB_DEFAULT.alunas,
-        turmas:     parsed.turmas     || [],
-        checkins:   parsed.checkins   || [],
-        medidas:    parsed.medidas    || [],
-        pagamentos: parsed.pagamentos || [],
-        despesas:   parsed.despesas   || [],
-        nextId:     parsed.nextId     || 10,
+      const p = JSON.parse(saved);
+      DB = {
+        alunas:     p.alunas     || DB_DEFAULT.alunas,
+        turmas:     p.turmas     || [],
+        checkins:   p.checkins   || [],
+        medidas:    p.medidas    || [],
+        pagamentos: p.pagamentos || [],
+        despesas:   p.despesas   || [],
+        nextId:     p.nextId     || 10,
       };
     }
-  } catch(e) { console.warn('Erro ao carregar DB:', e); }
-  return JSON.parse(JSON.stringify(DB_DEFAULT));
+  } catch(e) { console.warn('Erro localStorage:', e); }
 }
 
-// Salva DB no localStorage — chamado após toda ação que modifica dados
-function salvarDB() {
-  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); }
-  catch(e) { console.warn('Erro ao salvar DB:', e); }
+/* ── Salva no Firestore E no localStorage ── */
+async function salvarDB() {
+  // localStorage sempre (cache offline)
+  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
+  // Firestore se disponível
+  if (firestoreAtivo && window._firestore) {
+    try {
+      await window._firestore.setDoc(window._firestore.DB_DOC, JSON.parse(JSON.stringify(DB)));
+    } catch(e) { console.warn('Erro ao salvar no Firestore:', e); }
+  }
 }
 
-let DB = carregarDB();
+/* ── Listener tempo real: qualquer mudança no Firestore atualiza todos ── */
+function iniciarListenerTempoReal() {
+  if (!firestoreAtivo || !window._firestore) return;
+  if (_unsubscribe) _unsubscribe(); // cancela listener anterior se existir
+  _unsubscribe = window._firestore.onSnapshot(window._firestore.DB_DOC, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    // só atualiza se a mudança veio de OUTRO cliente (evita loop)
+    const novoJson = JSON.stringify(data);
+    const atualJson = JSON.stringify(DB);
+    if (novoJson === atualJson) return;
+    DB = {
+      alunas:     data.alunas     || [],
+      turmas:     data.turmas     || [],
+      checkins:   data.checkins   || [],
+      medidas:    data.medidas    || [],
+      pagamentos: data.pagamentos || [],
+      despesas:   data.despesas   || [],
+      nextId:     data.nextId     || DB.nextId,
+    };
+    try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
+    // re-renderiza a tela certa
+    if (currentUser?.tipo === 'aluna') {
+      atualizarStatusTodas();
+      renderPortalAluna(currentUser.alunaId, document.getElementById('ap-content'), false);
+    } else if (currentUser?.tipo === 'admin') {
+      syncTudo();
+    }
+  });
+}
+
+let currentUser = null;
+let secAnterior = 'alunas';
+let tFiltro = 'todos';
+let editTurmaId = null;
+let addAlTurmaId = null;
+let medAlunaId = null;
 
 let currentUser = null;
 let secAnterior = 'alunas';
@@ -1184,13 +1280,12 @@ function toggleSenha() {
 
 document.getElementById('lin-pass').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
 
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('lin-user').value.trim().toLowerCase().replace(/\s+/g,'');
   const p = document.getElementById('lin-pass').value;
   const lembrar = document.getElementById('lin-lembrar').checked;
   const err = document.getElementById('lerr');
 
-  // salva ou remove usuário lembrado
   try {
     if (lembrar) localStorage.setItem('pkc_login_user', u);
     else localStorage.removeItem('pkc_login_user');
@@ -1202,9 +1297,14 @@ function doLogin() {
     document.getElementById('app').classList.add('visible');
     document.getElementById('sadm-av').textContent = 'K';
     document.getElementById('sadm-name').textContent = 'Kelli';
-    initAdmin();
+    await initAdmin();
     return;
   }
+
+  // para aluna: carrega DB do Firestore antes de verificar login
+  mostrarLoading(true);
+  await carregarDB();
+  mostrarLoading(false);
 
   const aluna = DB.alunas.find(a => a.login === u && a.senha === p);
   if (aluna) {
@@ -1212,7 +1312,8 @@ function doLogin() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('ap-username').textContent = aluna.nome;
     document.getElementById('aluna-app').style.display = 'block';
-    renderPortalAluna(aluna.id, document.getElementById('ap-content'));
+    iniciarListenerTempoReal(); // escuta mudanças em tempo real
+    renderPortalAluna(aluna.id, document.getElementById('ap-content'), false);
     return;
   }
 
@@ -1223,38 +1324,44 @@ function doLogin() {
 }
 
 function doLogout() {
+  if (_unsubscribe) { _unsubscribe(); _unsubscribe = null; }
   currentUser = null;
   document.getElementById('app').classList.remove('visible');
   document.getElementById('aluna-app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('lin-pass').value = '';
-  // mantém o usuário no campo se "lembrar" estiver marcado
   if (!document.getElementById('lin-lembrar').checked) {
     document.getElementById('lin-user').value = '';
   }
 }
 
-function initAdmin() {
+async function initAdmin() {
+  mostrarLoading(true);
+  await carregarDB();
+  mostrarLoading(false);
+  iniciarListenerTempoReal();
   preencherSelectsAlunas();
   syncTudo();
   setTodayDateInputs();
 }
 
-// Sync em tempo real para a tela da aluna:
-// re-carrega o DB e re-renderiza quando a aba fica visível novamente
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && currentUser?.tipo === 'aluna') {
-    DB = carregarDB();
-    renderPortalAluna(currentUser.alunaId, document.getElementById('ap-content'), false);
+function mostrarLoading(show) {
+  let el = document.getElementById('loading-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.style.cssText = 'position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;';
+    el.innerHTML = `<div style="width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite"></div><div style="font-size:13px;color:var(--muted)">Carregando dados...</div>`;
+    document.body.appendChild(el);
+    if (!document.getElementById('spin-style')) {
+      const s = document.createElement('style');
+      s.id = 'spin-style';
+      s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+      document.head.appendChild(s);
+    }
   }
-});
-// também atualiza a cada 30s se a aluna estiver com a aba aberta
-setInterval(() => {
-  if (currentUser?.tipo === 'aluna') {
-    DB = carregarDB();
-    renderPortalAluna(currentUser.alunaId, document.getElementById('ap-content'), false);
-  }
-}, 30000);
+  el.style.display = show ? 'flex' : 'none';
+}
 
 /* ════════════════════════════════════════════
    NAVEGAÇÃO ADMIN
@@ -2512,10 +2619,10 @@ function atualizarBadge() {
 }
 
 // 3. Ponto único de sincronização — chame este em vez de renders individuais
-function syncTudo(opts = {}) {
+async function syncTudo(opts = {}) {
   atualizarStatusTodas();
   atualizarBadge();
-  salvarDB(); // persiste tudo no localStorage
+  await salvarDB(); // persiste no Firestore + localStorage
   renderDashboard();
 
   const secAtiva = document.querySelector('.sec.active')?.id || '';
