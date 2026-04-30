@@ -1054,7 +1054,7 @@ body.light .ci-bigbtn { box-shadow: 0 4px 16px rgba(240,54,154,.2); }
   </div>
 </div>
 
-<!-- Firebase SDK -->
+<!-- Script principal com Firebase integrado -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getFirestore, doc, getDoc, setDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
@@ -1068,17 +1068,11 @@ const firebaseConfig = {
   appId: "1:968675355503:web:f65cbd9d770958f179969a"
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-const db_fire = getFirestore(firebaseApp);
-const DB_DOC = doc(db_fire, 'academia', 'dados');
+const _fbApp  = initializeApp(firebaseConfig);
+const _db     = getFirestore(_fbApp);
+const DB_DOC  = doc(_db, 'academia', 'dados');
 
-// expõe para o script principal
-window._firestore = { getDoc, setDoc, onSnapshot, DB_DOC };
-window._firebaseReady = true;
-window.dispatchEvent(new Event('firebase-ready'));
-</script>
 
-<script>
 /* ════════════════════════════════════════════
    ESTADO GLOBAL + FIRESTORE
 ════════════════════════════════════════════ */
@@ -1103,78 +1097,64 @@ const DB_DEFAULT = {
 
 let DB = JSON.parse(JSON.stringify(DB_DEFAULT));
 let firestoreAtivo = false;
-let _unsubscribe = null; // listener tempo real
+let _unsubscribe = null;
 
-/* ── Carrega dados do Firestore (ou localStorage como fallback) ── */
 async function carregarDB() {
-  if (window._firebaseReady && window._firestore) {
-    try {
-      const snap = await window._firestore.getDoc(window._firestore.DB_DOC);
-      if (snap.exists()) {
-        const data = snap.data();
-        DB = {
-          alunas:     data.alunas     || DB_DEFAULT.alunas,
-          turmas:     data.turmas     || [],
-          checkins:   data.checkins   || [],
-          medidas:    data.medidas    || [],
-          pagamentos: data.pagamentos || [],
-          despesas:   data.despesas   || [],
-          nextId:     data.nextId     || 10,
-        };
-        firestoreAtivo = true;
-        // copia para localStorage como cache offline
-        try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
-        return;
-      } else {
-        // primeira vez: sobe o DB_DEFAULT para o Firestore
-        await window._firestore.setDoc(window._firestore.DB_DOC, DB_DEFAULT);
-        DB = JSON.parse(JSON.stringify(DB_DEFAULT));
-        firestoreAtivo = true;
-        return;
-      }
-    } catch(e) { console.warn('Firestore indisponível, usando localStorage:', e); }
-  }
-  // fallback: localStorage
   try {
-    const saved = localStorage.getItem(DB_KEY);
-    if (saved) {
-      const p = JSON.parse(saved);
+    const snap = await getDoc(DB_DOC);
+    if (snap.exists()) {
+      const data = snap.data();
       DB = {
-        alunas:     p.alunas     || DB_DEFAULT.alunas,
-        turmas:     p.turmas     || [],
-        checkins:   p.checkins   || [],
-        medidas:    p.medidas    || [],
-        pagamentos: p.pagamentos || [],
-        despesas:   p.despesas   || [],
-        nextId:     p.nextId     || 10,
+        alunas:     data.alunas     || DB_DEFAULT.alunas,
+        turmas:     data.turmas     || [],
+        checkins:   data.checkins   || [],
+        medidas:    data.medidas    || [],
+        pagamentos: data.pagamentos || [],
+        despesas:   data.despesas   || [],
+        nextId:     data.nextId     || 10,
       };
+    } else {
+      await setDoc(DB_DOC, JSON.parse(JSON.stringify(DB_DEFAULT)));
+      DB = JSON.parse(JSON.stringify(DB_DEFAULT));
     }
-  } catch(e) { console.warn('Erro localStorage:', e); }
-}
-
-/* ── Salva no Firestore E no localStorage ── */
-async function salvarDB() {
-  // localStorage sempre (cache offline)
-  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
-  // Firestore se disponível
-  if (firestoreAtivo && window._firestore) {
+    firestoreAtivo = true;
+    try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
+  } catch(e) {
+    console.warn('Firestore indisponível, usando localStorage:', e);
     try {
-      await window._firestore.setDoc(window._firestore.DB_DOC, JSON.parse(JSON.stringify(DB)));
-    } catch(e) { console.warn('Erro ao salvar no Firestore:', e); }
+      const saved = localStorage.getItem(DB_KEY);
+      if (saved) {
+        const p = JSON.parse(saved);
+        DB = {
+          alunas:     p.alunas     || DB_DEFAULT.alunas,
+          turmas:     p.turmas     || [],
+          checkins:   p.checkins   || [],
+          medidas:    p.medidas    || [],
+          pagamentos: p.pagamentos || [],
+          despesas:   p.despesas   || [],
+          nextId:     p.nextId     || 10,
+        };
+      }
+    } catch(e2) {}
   }
 }
 
-/* ── Listener tempo real: qualquer mudança no Firestore atualiza todos ── */
+async function salvarDB() {
+  try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
+  if (firestoreAtivo) {
+    try { await setDoc(DB_DOC, JSON.parse(JSON.stringify(DB))); }
+    catch(e) { console.warn('Erro ao salvar Firestore:', e); }
+  }
+}
+
 function iniciarListenerTempoReal() {
-  if (!firestoreAtivo || !window._firestore) return;
-  if (_unsubscribe) _unsubscribe(); // cancela listener anterior se existir
-  _unsubscribe = window._firestore.onSnapshot(window._firestore.DB_DOC, (snap) => {
+  if (!firestoreAtivo) return;
+  if (_unsubscribe) _unsubscribe();
+  _unsubscribe = onSnapshot(DB_DOC, (snap) => {
     if (!snap.exists()) return;
     const data = snap.data();
-    // só atualiza se a mudança veio de OUTRO cliente (evita loop)
     const novoJson = JSON.stringify(data);
-    const atualJson = JSON.stringify(DB);
-    if (novoJson === atualJson) return;
+    if (novoJson === JSON.stringify(DB)) return;
     DB = {
       alunas:     data.alunas     || [],
       turmas:     data.turmas     || [],
@@ -1185,7 +1165,6 @@ function iniciarListenerTempoReal() {
       nextId:     data.nextId     || DB.nextId,
     };
     try { localStorage.setItem(DB_KEY, JSON.stringify(DB)); } catch(e){}
-    // re-renderiza a tela certa
     if (currentUser?.tipo === 'aluna') {
       atualizarStatusTodas();
       renderPortalAluna(currentUser.alunaId, document.getElementById('ap-content'), false);
@@ -2822,3 +2801,7 @@ document.addEventListener('DOMContentLoaded', () => {
     o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
   });
 });
+
+</script>
+</body>
+</html>
